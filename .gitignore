@@ -1,0 +1,10 @@
+.env
+*.pyc
+__pycache__/
+.venv/
+data/token_cache.json
+data/models/*.json
+data/models/*.pkl
+*.log
+dist/
+.DS_Store

@@ -1,0 +1,49 @@
+name: Biwfant Bot
+
+on:
+  schedule:
+    # Every 6 hours (data refresh + market scan)
+    - cron: '0 */6 * * *'
+    # Thursday 20:00 UTC — pre-jornada lineup lock window
+    - cron: '0 20 * * 4'
+    # Monday 06:00 UTC — post-weekend cleanup
+    - cron: '0 6 * * 1'
+
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry-run mode (no real actions)?'
+        required: false
+        default: 'false'
+        type: choice
+        options: ['true', 'false']
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40   # leaves room for 30-min confirmation window
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run bot
+        env:
+          BIWENGER_EMAIL:      ${{ secrets.BIWENGER_EMAIL }}
+          BIWENGER_PASSWORD:   ${{ secrets.BIWENGER_PASSWORD }}
+          BIWENGER_LEAGUE_ID:  '1809775'
+          BIWENGER_USER_ID:    '11444346'
+          TELEGRAM_BOT_TOKEN:  ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:    ${{ secrets.TELEGRAM_CHAT_ID }}
+          DRY_RUN:             ${{ inputs.dry_run || 'false' }}
+          SSL_VERIFY:          'true'   # GitHub's network has valid certs
+        run: python scripts/run_bot.py
