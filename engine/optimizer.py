@@ -29,6 +29,7 @@ VALID_FORMATIONS: dict[str, tuple[int, int, int, int]] = {
 def optimize_lineup(
     players: list[Player],
     preferred_formation: str | None = None,
+    fixture_map: dict[str, float] | None = None,
 ) -> tuple[list[Player], str, float]:
     """
     Returns (starting_xi, formation, predicted_total_points).
@@ -52,7 +53,7 @@ def optimize_lineup(
     best_score = -1.0
 
     for f in formations:
-        xi, score = _solve(players, f)
+        xi, score = _solve(players, f, fixture_map)
         if xi and score > best_score:
             best_score = score
             best_xi = xi
@@ -62,7 +63,7 @@ def optimize_lineup(
 
 
 def _solve(
-    players: list[Player], formation: str
+    players: list[Player], formation: str, fixture_map: dict[str, float] | None = None
 ) -> tuple[list[Player], float]:
     """Solve ILP for a fixed formation. Returns (xi, total_score)."""
     reqs = VALID_FORMATIONS[formation]  # (GK, DEF, MID, FWD)
@@ -70,7 +71,7 @@ def _solve(
     prob = pulp.LpProblem(f"lineup_{formation}", pulp.LpMaximize)
 
     x = {p.id: pulp.LpVariable(f"x_{p.id}", cat="Binary") for p in players}
-    scores = {p.id: score_player(p) for p in players}
+    scores = {p.id: score_player(p, fixture_map.get(p.team.slug if p.team else "", 1.0) if fixture_map else 1.0) for p in players}
 
     # Objective
     prob += pulp.lpSum(scores[p.id] * x[p.id] for p in players)

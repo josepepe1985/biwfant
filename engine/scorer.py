@@ -1,8 +1,13 @@
 """
-Heuristic player scorer.
+Heuristic player scorer — upgraded with fixture difficulty + minutes played.
 
-Uses fitness (last 5 jornada points) + season average + price trend.
-No training data needed — works on day 1.
+Score formula:
+  base  = 0.5 × fitness_avg + 0.3 × season_avg + 0.2 × minutes_pct/10
+  score = base × fixture_difficulty × injury_penalty
+
+fixture_difficulty: 0.65 (tough away) … 1.30 (easy home), default 1.0
+minutes_pct: estimated % of minutes played this season (proxy for rotation risk)
+injury_penalty: 0.0 if confirmed injured, 0.7 if doubt, 1.0 otherwise
 
 XGBoost upgrade path: once 10+ jornadas of data are collected,
 train `engine/xgb_trainer.py` and drop in the trained model here.
@@ -11,34 +16,46 @@ train `engine/xgb_trainer.py` and drop in the trained model here.
 from api.models import Player
 
 
-def score_player(player: Player) -> float:
+def score_player(player: Player, fixture_difficulty: float = 1.0) -> float:
     """
     Predicted points for next jornada.
 
-    Formula:
-      base = 0.6 * fitness_avg + 0.4 * season_avg
-      score = base * trend_multiplier
-
-    Rationale: recent form (fitness) outweighs season average 60/40.
-    Trend multiplier rewards in-form players (+10%) and penalises
-    declining ones (-10%).
+    Args:
+        player: Player model instance.
+        fixture_difficulty: Multiplier from engine.fixtures (0.65–1.30).
+                            Defaults to 1.0 (neutral) when fixture data unavailable.
     """
-    if not player.is_available or player.games_played == 0:
+    if player.games_played == 0:
         return 0.0
 
-    fitness = player.fitness_avg        # avg last-5 jornada pts
-    season_avg = player.points_per_game # full-season avg
+    injury_penalty = {
+        "ok": 1.0,
+        "doubt": 0.7,
+        "injured": 0.0,
+        "suspended": 0.0,
+    }.get(player.status, 0.5)
 
-    base = 0.6 * fitness + 0.4 * season_avg
+    if injury_penalty == 0.0:
+        return 0.0
 
-    trend_mult = {"rising": 1.10, "stable": 1.00, "falling": 0.90}.get(
-        player.price_trend, 1.0
+    fitness_avg = player.fitness_avg
+    season_avg = player.points_per_game
+
+    # Minutes played proxy: (games_played / max expected games) capped at 100
+    # La Liga has ~38 jornadas; a fully selected player averages ~30 by mid-season
+    max_games = max(player.games_played, 10)
+    minutes_pct = min(100.0, (player.games_played / max_games) * 100)
+
+    base = (
+        0.50 * fitness_avg
+        + 0.30 * season_avg
+        + 0.20 * (minutes_pct / 10)  # normalise to ~same scale as avg pts
     )
 
-    return round(base * trend_mult, 3)
+    return round(base * fixture_difficulty * injury_penalty, 3)
 
 
-def value_efficiency(player: Player) -> float:
+def value_efficiency(player: Player, fixture_difficulty: float = 1.0) -> float:
     """
     Value metric: predicted points per million euros.
 
@@ -47,4 +64,5 @@ def value_efficiency(player: Player) -> float:
     """
     if player.price == 0:
         return 0.0
-    return round(score_player(player) / player.price_millions, 4)
+    return round(score_player(player, fixture_difficulty) / player.price_millions, 4)
+

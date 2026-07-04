@@ -22,6 +22,15 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""  # numeric ID or @username
 
+    # LLM (Groq free tier recommended — https://console.groq.com)
+    llm_api_key: str = ""
+    llm_base_url: str = "https://api.groq.com/openai/v1"
+    llm_model: str = "llama-3.3-70b-versatile"
+
+    @property
+    def llm_enabled(self) -> bool:
+        return bool(self.llm_api_key)
+
     # Bot behaviour
     dry_run: bool = True  # Safety default — must explicitly set to false
     max_spend_per_jornada: int = 5_000_000
