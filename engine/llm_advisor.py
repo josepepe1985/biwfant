@@ -77,10 +77,13 @@ def _get_client():
     if not settings.llm_enabled:
         return None
     try:
+        import httpx
         from openai import OpenAI
+        http_client = httpx.Client(verify=settings.ssl_verify)
         return OpenAI(
             api_key=settings.llm_api_key,
             base_url=settings.llm_base_url or None,
+            http_client=http_client,
         )
     except ImportError:
         logger.warning("openai package not installed — LLM features disabled")
