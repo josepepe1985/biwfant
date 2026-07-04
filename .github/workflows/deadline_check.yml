@@ -1,0 +1,38 @@
+name: Deadline Alert
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'   # every 30 minutes
+
+  workflow_dispatch:          # manual trigger for testing
+
+jobs:
+  check-deadline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - run: pip install -r requirements.txt
+
+      - name: Check jornada deadline
+        env:
+          BIWENGER_EMAIL:      ${{ secrets.BIWENGER_EMAIL }}
+          BIWENGER_PASSWORD:   ${{ secrets.BIWENGER_PASSWORD }}
+          BIWENGER_LEAGUE_ID:  '1809775'
+          BIWENGER_USER_ID:    '11444346'
+          TELEGRAM_BOT_TOKEN:  ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:    ${{ secrets.TELEGRAM_CHAT_ID }}
+          LLM_API_KEY:         ${{ secrets.LLM_API_KEY }}
+          LLM_BASE_URL:        ${{ secrets.LLM_BASE_URL }}
+          LLM_MODEL:           ${{ secrets.LLM_MODEL }}
+          DEADLINE_ALERT_HOURS: '3'
+          DRY_RUN:             'false'
+          SSL_VERIFY:          'true'
+        run: python scripts/deadline_alert.py

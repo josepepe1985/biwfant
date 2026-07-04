@@ -86,16 +86,48 @@ def main() -> None:
         except Exception as exc:
             logger.debug(f"Snapshot save failed for {p.name}: {exc}")
 
+    # ---------------------------------------------------------- standings + rivalry
+    rivalry_ctx: dict = {}
+    standings_line = ""
+    try:
+        raw_standings = client.get_standings()
+        store.save_standings(raw_standings)
+        my_entry = next((u for u in raw_standings if u.get("id") == settings.biwenger_user_id), None)
+        if my_entry:
+            my_pos = my_entry.get("position", 0)
+            my_pts = my_entry.get("points", 0)
+            leader = raw_standings[0] if raw_standings else {}
+            rival_above = next((u for u in raw_standings if u.get("position") == my_pos - 1), None)
+            rival_below = next((u for u in raw_standings if u.get("position") == my_pos + 1), None)
+            standings_line = (
+                f"📊 Posición: *{my_pos}ª* | Gap líder: *-{leader.get('points',0)-my_pts}pts*"
+            )
+            if rival_above:
+                gap = rival_above.get("points", 0) - my_pts
+                standings_line += f" | Rival: *{rival_above['name']}* (-{gap}pts)"
+            rivalry_ctx = {
+                "my_position": my_pos,
+                "rival_above": rival_above,
+                "rival_below": rival_below,
+                "gap_to_leader": leader.get("points", 0) - my_pts,
+            }
+            logger.info(f"Standings: {my_pos}ª, {gap if rival_above else 'N/A'}pts from rival above")
+    except Exception as exc:
+        logger.warning(f"Standings fetch failed: {exc}")
+
     # Status summary
     llm_status = "✅ IA activa" if settings.llm_enabled else "⚠️ Sin IA"
-    send_message(
-        f"🤖 *Vampiros United — ciclo del bot*\n"
-        f"💰 Balance: €{balance:,.0f}\n"
-        f"📊 Puntos: {total_points}\n"
-        f"👥 Plantilla: {len(players)} jugadores\n"
-        f"🧠 {llm_status}\n"
-        f"{'⚠️ *MODO DRY\\-RUN*' if settings.dry_run else '🟢 MODO LIVE'}"
-    )
+    status_lines = [
+        f"🤖 *Vampiros United — ciclo del bot*",
+        f"💰 Balance: €{balance:,.0f}",
+        f"📊 Puntos: {total_points}",
+        f"👥 Plantilla: {len(players)} jugadores",
+        f"🧠 {llm_status}",
+    ]
+    if standings_line:
+        status_lines.append(standings_line)
+    status_lines.append(f"{'⚠️ *MODO DRY\\-RUN*' if settings.dry_run else '🟢 MODO LIVE'}")
+    send_message("\n".join(status_lines))
 
     # --------------------------------------------------------------- lineup
     logger.info("Computing optimal lineup…")
@@ -163,6 +195,15 @@ def main() -> None:
             f"formación actual {current_formation}, "
             f"balance €{balance/1_000_000:.1f}M"
         )
+        if rivalry_ctx:
+            pos = rivalry_ctx.get("my_position")
+            gap = rivalry_ctx.get("gap_to_leader")
+            ra = rivalry_ctx.get("rival_above") or {}
+            squad_summary += (
+                f", posición {pos}ª en liga, "
+                f"gap líder -{gap}pts, "
+                f"rival inmediato: {ra.get('name','?')}"
+            )
 
         # Ask LLM for transfer advice
         llm_advice = advise_transfers(

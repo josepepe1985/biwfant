@@ -107,3 +107,37 @@ class LeagueStanding(BaseModel):
     teamValue: int = 0
     teamValueInc: int = 0
     position: int = 0
+
+
+class LeagueUser(BaseModel):
+    """A manager in the league (for rivalry analysis)."""
+    id: int
+    name: str
+    points: int = 0
+    position: int = 0
+    teamValue: int = 0
+    balance: int = 0
+
+    @property
+    def team_value_millions(self) -> float:
+        return self.teamValue / 1_000_000
+
+
+class RoundInfo(BaseModel):
+    """Upcoming or current jornada info."""
+    id: int
+    name: str
+    status: str = "scheduled"   # scheduled | active | finished
+    deadline_utc: Optional[str] = None   # ISO timestamp of lineup lock
+
+    @property
+    def hours_until_deadline(self) -> float | None:
+        if not self.deadline_utc:
+            return None
+        from datetime import datetime, timezone
+        try:
+            dl = datetime.fromisoformat(self.deadline_utc.replace("Z", "+00:00"))
+            delta = dl - datetime.now(timezone.utc)
+            return delta.total_seconds() / 3600
+        except Exception:
+            return None

@@ -249,3 +249,89 @@ class BiwengerClient:
             f"/league/{settings.biwenger_league_id}/board",
             params={"offset": offset, "limit": limit, "type": "transfer,market"},
         )
+
+    # --------------------------------------------------------------- standings
+
+    def get_standings(self) -> list[dict]:
+        """
+        Return full league standings as a list of user dicts sorted by position.
+        """
+        data = self._get(
+            f"/league/{settings.biwenger_league_id}",
+            params={"fields": "standings,users"},
+        )
+        users = data.get("standings") or data.get("users") or []
+        # Attach position index if not present
+        for i, u in enumerate(users, start=1):
+            u.setdefault("position", i)
+        return users
+
+    def get_rival_squad(self, user_id: int) -> dict:
+        """
+        Fetch another manager's squad (same structure as get_squad but read-only).
+        Returns dict with all_players list.
+        """
+        try:
+            raw = self._get(
+                f"/user/{user_id}",
+                params={"fields": "*,lineup,players(id),-trophies"},
+            )
+        except Exception as exc:
+            logger.warning(f"Could not fetch rival squad {user_id}: {exc}")
+            return {"all_players": [], "points": 0, "balance": 0}
+
+        lineup = raw.get("lineup") or {}
+        starter_players = lineup.get("players") or []
+        lineup_ids: set[int] = set(lineup.get("playersID") or [])
+        all_ids = [p["id"] for p in (raw.get("players") or []) if p.get("id")]
+        bench_ids = [i for i in all_ids if i not in lineup_ids]
+
+        bench_players = []
+        for pid in bench_ids[:5]:   # cap at 5 to avoid rate limits
+            try:
+                bench_players.append(self.get_player(pid))
+            except Exception:
+                pass
+
+        raw["all_players"] = starter_players + bench_players
+        return raw
+
+    # --------------------------------------------------------------- rounds
+
+    def get_rounds_with_dates(self) -> list[dict]:
+        """
+        Return all rounds with deadline timestamps.
+        Uses the league rounds endpoint.
+        """
+        try:
+            data = self._get(
+                "/rounds/league",
+                params={"fields": "rounds(id,name,status,date,deadline)"},
+            )
+            return data.get("rounds") or data if isinstance(data, list) else []
+        except Exception as exc:
+            logger.warning(f"get_rounds_with_dates failed: {exc}")
+            return []
+
+    def get_next_round(self) -> dict | None:
+        """
+        Return the next unfinished round dict, or None if season is over.
+        Dict keys: id, name, status, deadline_utc (ISO string or None).
+        """
+        rounds = self.get_rounds_with_dates()
+        for r in rounds:
+            status = r.get("status", "")
+            if status in ("active", "scheduled", ""):
+                # Normalise deadline field name variations
+                deadline = r.get("deadline") or r.get("date") or r.get("endDate")
+                if isinstance(deadline, int):
+                    # Unix timestamp
+                    from datetime import datetime, timezone
+                    deadline = datetime.fromtimestamp(deadline, tz=timezone.utc).isoformat()
+                return {
+                    "id": r.get("id"),
+                    "name": r.get("name", "Jornada ?"),
+                    "status": status,
+                    "deadline_utc": deadline,
+                }
+        return None

@@ -1,0 +1,37 @@
+name: Bot Listener
+
+on:
+  workflow_dispatch:          # triggered manually or by you sending a command
+    inputs:
+      timeout:
+        description: 'Seconds to listen for commands'
+        required: false
+        default: '120'
+
+jobs:
+  listen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - run: pip install -r requirements.txt
+
+      - name: Listen for Telegram commands
+        env:
+          BIWENGER_EMAIL:      ${{ secrets.BIWENGER_EMAIL }}
+          BIWENGER_PASSWORD:   ${{ secrets.BIWENGER_PASSWORD }}
+          BIWENGER_LEAGUE_ID:  '1809775'
+          BIWENGER_USER_ID:    '11444346'
+          TELEGRAM_BOT_TOKEN:  ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:    ${{ secrets.TELEGRAM_CHAT_ID }}
+          LISTENER_TIMEOUT:    ${{ inputs.timeout || '120' }}
+          DRY_RUN:             'false'
+          SSL_VERIFY:          'true'
+        run: python scripts/bot_listener.py

@@ -1,0 +1,48 @@
+name: Price Watcher
+
+on:
+  schedule:
+    - cron: '0 */2 * * *'    # every 2 hours
+
+  workflow_dispatch:
+
+jobs:
+  watch-prices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - run: pip install -r requirements.txt
+
+      - name: Check prices and watchlist
+        env:
+          BIWENGER_EMAIL:        ${{ secrets.BIWENGER_EMAIL }}
+          BIWENGER_PASSWORD:     ${{ secrets.BIWENGER_PASSWORD }}
+          BIWENGER_LEAGUE_ID:    '1809775'
+          BIWENGER_USER_ID:      '11444346'
+          TELEGRAM_BOT_TOKEN:    ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:      ${{ secrets.TELEGRAM_CHAT_ID }}
+          PRICE_DROP_THRESHOLD:  '150000'
+          DRY_RUN:               'false'
+          SSL_VERIFY:            'true'
+        run: python scripts/price_watcher.py
+
+      - name: Commit updated DB
+        if: always()
+        run: |
+          git config user.name  "biwfant-bot"
+          git config user.email "bot@biwfant"
+          git add data/biwfant.db || true
+          git diff --staged --quiet || git commit -m "chore: price snapshot [skip ci]"
+          git push || true
