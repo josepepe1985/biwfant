@@ -32,7 +32,7 @@ from engine.market_scanner import scan_market, find_sell_candidates
 from engine.scorer import score_player
 from engine.llm_advisor import advise_transfers, narrate_lineup, summarise_market_scan
 from actions.lineup import get_best_lineup, build_lineup_message
-from actions.transfers import build_transfers_message
+from actions.transfers import build_transfers_message, build_market_overview_message
 from bot.telegram_bot import (
     send_message,
     send_with_confirmation,
@@ -179,8 +179,22 @@ def main() -> None:
     my_squad_ids = {p.id for p in players}
 
     try:
+        market_raw = client.get_market()
+        offers_raw = client.get_offers()
         opportunities = scan_market(client, my_squad_ids, fixture_map)
         sell_candidates = find_sell_candidates(players, opportunities, fixture_map)
+
+        # Build player_map: full Player objects keyed by id, for fitness display.
+        # Covers market players (from scan_market) + our own squad players.
+        player_map: dict[int, Player] = {opp["player"].id: opp["player"] for opp in opportunities}
+        for p in players:
+            player_map[p.id] = p
+
+        # Send full market overview (listings + offers)
+        market_overview_msg = build_market_overview_message(
+            market_raw, offers_raw, my_squad_ids, player_map
+        )
+        send_message(market_overview_msg)
 
         # Save market snapshots
         for opp in opportunities[:10]:
