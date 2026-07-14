@@ -2,7 +2,7 @@ name: Price Watcher
 
 on:
   schedule:
-    - cron: '0 */2 * * *'    # every 2 hours
+    - cron: '0 9,15,21 * * *'  # 3x/day: 09:00, 15:00, 21:00 UTC
 
   workflow_dispatch:
 
