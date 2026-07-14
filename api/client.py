@@ -181,6 +181,23 @@ class BiwengerClient:
             return {}
         return self._delete("/market", params={"player": player_id})
 
+    def get_offers(self) -> dict:
+        """
+        Return pending transfer offers.
+
+        Typical response shape:
+          {
+            "sent":     [ { player, amount, type, to (user), status, ... } ],
+            "received": [ { player, amount, type, from (user), status, ... } ],
+          }
+        Falls back to an empty dict on any error so the bot keeps running.
+        """
+        try:
+            return self._get("/offers")
+        except Exception as exc:
+            logger.warning(f"get_offers failed: {exc}")
+            return {}
+
     def place_bid(
         self,
         player_id: int,
