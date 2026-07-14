@@ -18,7 +18,7 @@ on:
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 40   # leaves room for 30-min confirmation window
+    timeout-minutes: 15   # bot completes well within 10 min with short confirmation window
     permissions:
       contents: write      # needed to commit SQLite DB history
 
@@ -48,7 +48,7 @@ jobs:
           LLM_API_KEY:         ${{ secrets.LLM_API_KEY }}
           LLM_BASE_URL:        ${{ secrets.LLM_BASE_URL }}
           LLM_MODEL:           ${{ secrets.LLM_MODEL }}
-          DRY_RUN:             ${{ inputs.dry_run || 'false' }}
+          CONFIRMATION_TIMEOUT_SECONDS: '300'  # 5 min — you get a Telegram ping, tap within 5 min or it auto-skips
           SSL_VERIFY:          'true'   # GitHub's network has valid certs
         run: python scripts/run_bot.py
 
