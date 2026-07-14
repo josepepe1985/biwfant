@@ -93,14 +93,11 @@ def build_market_overview_message(
     if sent:
         lines.append(f"📤 *Mis ofertas enviadas ({len(sent)}):*")
         for o in sent:
-            players_req = o.get("requestedPlayers") or o.get("players") or []
-            p_name = players_req[0].get("name", "?") if players_req and isinstance(players_req[0], dict) else "?"
-            if p_name == "?" and isinstance(players_req[0] if players_req else None, int):
-                p_name = f"ID {players_req[0]}"
+            p_name = _offer_player_name(o, player_map)
             amount = o.get("amount", 0)
-            to_user = (o.get("to") or {}).get("name", "Pool") if isinstance(o.get("to"), dict) else "Pool"
+            to_user = (o.get("to") or {}).get("name", "Pool libre") if isinstance(o.get("to"), dict) else "Pool libre"
             status = o.get("status", "")
-            status_icon = {"pending": "⏳", "accepted": "✅", "rejected": "❌"}.get(status, "🔄")
+            status_icon = {"waiting": "⏳", "pending": "⏳", "accepted": "✅", "rejected": "❌"}.get(status, "🔄")
             lines.append(f"  {status_icon} *{p_name}* — €{amount:,.0f} → {to_user}")
     else:
         lines.append("📤 Sin ofertas enviadas.")
@@ -111,20 +108,36 @@ def build_market_overview_message(
     if received:
         lines.append(f"📥 *Ofertas recibidas ({len(received)}):*")
         for o in received:
-            players_req = o.get("requestedPlayers") or o.get("players") or []
-            p_name = players_req[0].get("name", "?") if players_req and isinstance(players_req[0], dict) else "?"
-            if p_name == "?" and isinstance(players_req[0] if players_req else None, int):
-                p_name = f"ID {players_req[0]}"
+            p_name = _offer_player_name(o, player_map)
             amount = o.get("amount", 0)
             from_user = (o.get("from") or {}).get("name", "?") if isinstance(o.get("from"), dict) else "?"
             status = o.get("status", "")
-            status_icon = {"pending": "⏳", "accepted": "✅", "rejected": "❌"}.get(status, "🔄")
+            status_icon = {"waiting": "⏳", "pending": "⏳", "accepted": "✅", "rejected": "❌"}.get(status, "🔄")
             lines.append(f"  {status_icon} *{p_name}* — €{amount:,.0f} ← {from_user}")
     else:
         lines.append("📥 Sin ofertas recibidas.")
 
     return "\n".join(lines)
 
+
+
+def _offer_player_name(offer: dict, player_map: "dict") -> str:
+    """Resolve player name from an offer's requestedPlayers list."""
+    players_req = offer.get("requestedPlayers") or offer.get("players") or []
+    if not players_req:
+        return "?"
+    first = players_req[0]
+    if isinstance(first, dict):
+        pid = first.get("id")
+        name = first.get("name")
+        if name:
+            return name
+        if pid and pid in player_map:
+            return player_map[pid].name
+        return f"ID {pid}" if pid else "?"
+    if isinstance(first, int):
+        return player_map[first].name if first in player_map else f"ID {first}"
+    return "?"
 
 
 def build_transfers_message(

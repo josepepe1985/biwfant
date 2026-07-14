@@ -183,17 +183,23 @@ class BiwengerClient:
 
     def get_offers(self) -> dict:
         """
-        Return pending transfer offers.
+        Return pending transfer offers split into sent/received.
 
-        Typical response shape:
-          {
-            "sent":     [ { player, amount, type, to (user), status, ... } ],
-            "received": [ { player, amount, type, from (user), status, ... } ],
-          }
-        Falls back to an empty dict on any error so the bot keeps running.
+        The API returns a flat list. We split by whether from.id == our user.
+        Shape: { "sent": [...], "received": [...] }
         """
         try:
-            return self._get("/offers")
+            raw = self._get("/offers")
+            if isinstance(raw, list):
+                sent, received = [], []
+                for o in raw:
+                    from_id = (o.get("from") or {}).get("id")
+                    if from_id == settings.biwenger_user_id:
+                        sent.append(o)
+                    else:
+                        received.append(o)
+                return {"sent": sent, "received": received}
+            return raw if isinstance(raw, dict) else {}
         except Exception as exc:
             logger.warning(f"get_offers failed: {exc}")
             return {}
