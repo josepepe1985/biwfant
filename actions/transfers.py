@@ -16,6 +16,67 @@ def _fitness_str(player: "Player | None") -> str:
     return "〔" + "·".join(parts) + "〕"
 
 
+def _evaluate_offer(amount: int, player: "Player | None") -> tuple[str, str]:
+    """
+    Return (verdict_emoji, reasoning) for a sent offer.
+
+    Verdicts: 🟢 Buena oferta / 🟡 Aceptable / 🔴 Mala oferta
+    """
+    if player is None:
+        return "❓", "Sin datos del jugador"
+
+    market_val = player.price
+    if market_val <= 0:
+        return "❓", "Precio de mercado desconocido"
+
+    ratio = amount / market_val  # 1.0 = at market price
+
+    reasons: list[str] = []
+
+    # Price vs market value
+    if ratio <= 0.90:
+        price_verdict = "🟢"
+        reasons.append(f"oferta {(1-ratio)*100:.0f}% por debajo del valor de mercado")
+    elif ratio <= 1.05:
+        price_verdict = "🟡"
+        reasons.append(f"oferta ajustada al valor de mercado (€{market_val:,.0f})")
+    else:
+        price_verdict = "🔴"
+        reasons.append(f"oferta {(ratio-1)*100:.0f}% por encima del valor de mercado")
+
+    # Price trend
+    if player.price_trend == "falling":
+        reasons.append("precio bajando 📉 — esperar puede ser mejor")
+        if price_verdict == "🟢":
+            price_verdict = "🟡"
+    elif player.price_trend == "rising":
+        reasons.append("precio subiendo 📈 — comprar ahora tiene sentido")
+        if price_verdict == "🟡":
+            price_verdict = "🟢"
+
+    # Recent form
+    if player.games_played >= 3:
+        avg = player.fitness_avg
+        if avg >= 6:
+            reasons.append(f"buena forma reciente ({avg:.1f} pts/j)")
+        elif avg <= 2:
+            reasons.append(f"mala forma reciente ({avg:.1f} pts/j)")
+            if price_verdict == "🟢":
+                price_verdict = "🟡"
+
+    # Value efficiency
+    if player.games_played >= 5 and player.price > 0:
+        eff = player.points_per_game / (player.price / 1_000_000)
+        if eff >= 3.0:
+            reasons.append(f"alto rendimiento ({eff:.1f} pts/M)")
+        elif eff < 1.5:
+            reasons.append(f"bajo rendimiento ({eff:.1f} pts/M)")
+            if price_verdict != "🔴":
+                price_verdict = "🟡"
+
+    return price_verdict, " · ".join(reasons) if reasons else "Sin información suficiente"
+
+
 def build_market_overview_message(
     market_raw: dict,
     offers_raw: dict,
@@ -40,12 +101,14 @@ def build_market_overview_message(
 
     # ── All active listings ──────────────────────────────────────────────────
     if sales:
-        # Group by position
+        # Group by position — use player_map for position since raw market only has player ID
         by_pos: dict[int, list[dict]] = {1: [], 2: [], 3: [], 4: []}
         other: list[dict] = []
         for s in sales:
-            p = s.get("player") or {}
-            pos = p.get("position", 0)
+            p_raw = s.get("player") or {}
+            pid = p_raw.get("id")
+            full_player = player_map.get(pid) if pid else None
+            pos = (full_player.position if full_player else None) or p_raw.get("position", 0)
             if pos in by_pos:
                 by_pos[pos].append(s)
             else:
@@ -63,7 +126,8 @@ def build_market_overview_message(
                 full_player = player_map.get(pid) if pid else None
                 seller = s.get("user") or {}
                 seller_name = seller.get("name", "Pool libre") if seller else "Pool libre"
-                name = p_raw.get("name", "?")
+                # prefer full player name from player_map, fall back to raw
+                name = (full_player.name if full_player else None) or p_raw.get("name", "?")
                 price = s.get("price", 0)
                 in_squad = "👤 " if pid in my_squad_ids else ""
                 fitness = _fitness_str(full_player)
@@ -77,7 +141,7 @@ def build_market_overview_message(
                 p_raw = s.get("player") or {}
                 pid = p_raw.get("id")
                 full_player = player_map.get(pid) if pid else None
-                name = p_raw.get("name", "?")
+                name = (full_player.name if full_player else None) or p_raw.get("name", "?")
                 price = s.get("price", 0)
                 fitness = _fitness_str(full_player)
                 lines.append(
@@ -93,12 +157,20 @@ def build_market_overview_message(
     if sent:
         lines.append(f"📤 *Mis ofertas enviadas ({len(sent)}):*")
         for o in sent:
+            players_req = o.get("requestedPlayers") or o.get("players") or []
+            pid = (players_req[0].get("id") if players_req and isinstance(players_req[0], dict) else players_req[0] if players_req and isinstance(players_req[0], int) else None)
+            full_player = player_map.get(pid) if pid else None
             p_name = _offer_player_name(o, player_map)
             amount = o.get("amount", 0)
             to_user = (o.get("to") or {}).get("name", "Pool libre") if isinstance(o.get("to"), dict) else "Pool libre"
             status = o.get("status", "")
             status_icon = {"waiting": "⏳", "pending": "⏳", "accepted": "✅", "rejected": "❌"}.get(status, "🔄")
+            verdict, reasoning = _evaluate_offer(amount, full_player)
+            fitness = _fitness_str(full_player)
             lines.append(f"  {status_icon} *{p_name}* — €{amount:,.0f} → {to_user}")
+            lines.append(f"     ↳ {verdict} {reasoning}")
+            if fitness:
+                lines.append(f"     ↳ últimos 5: {fitness}")
     else:
         lines.append("📤 Sin ofertas enviadas.")
 
