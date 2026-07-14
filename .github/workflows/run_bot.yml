@@ -2,12 +2,9 @@ name: Biwfant Bot
 
 on:
   schedule:
-    # Every 6 hours (data refresh + market scan)
-    - cron: '0 */6 * * *'
-    # Thursday 20:00 UTC — pre-jornada lineup lock window
-    - cron: '0 20 * * 4'
-    # Monday 06:00 UTC — post-weekend cleanup
-    - cron: '0 6 * * 1'
+    # Twice a day: 08:00 and 20:00 UTC
+    - cron: '0 8 * * *'
+    - cron: '0 20 * * *'
 
   workflow_dispatch:
     inputs:
